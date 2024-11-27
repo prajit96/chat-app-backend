@@ -1,6 +1,6 @@
 const express = require('express');
 require('dotenv').config();
-const Chat = require('./models/Chat'); 
+const Chat = require('./models/Chat');
 const http = require('http');
 const cors = require('cors');
 const { Server } = require('socket.io');
@@ -14,7 +14,7 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: "*", 
+    origin: "*", // You can restrict this to your frontend's URL later
     methods: ["GET", "POST"],
   },
 });
@@ -29,37 +29,19 @@ app.use('/api/users', userRoutes);
 // Connect DB
 connectDB();
 
-// Socket.io
+// Socket.IO Setup
 io.on('connection', (socket) => {
   console.log('New client connected');
 
-  // for messages
-  socket.on('sendMessage', async ({ contactId, text, sender }) => {
-    if (!text || !sender || !contactId) {
-      console.error('Missing required fields: sender, text, or contactId');
-      return;
-    }
+  socket.on('joinChat', (chatId) => {
+    socket.join(chatId);
+    console.log(`User joined chat: ${chatId}`);
+  });
 
-    const message = { text, sender, timestamp: new Date() };
-
-    // Find the chat between the sender and the contact
-    let chat = await Chat.findOne({ contactId: { $in: [sender, contactId] } });
-
-    if (!chat) {
-      // Create a new chat if it doesn't exist
-      const newChat = new Chat({
-        contactId: [sender, contactId],
-        messages: [message],
-      });
-      await newChat.save();
-    } else {
-      // Add the message to the existing chat
-      chat.messages.push(message);
-      await chat.save();
-    }
-
-    // Emit the message to the recipient
-    io.emit('receiveMessage', { contactId, message });
+  socket.on('sendMessage', (message) => {
+    const chatId = message.chatId;
+    socket.broadcast.to(chatId).emit('receiveMessage', message);
+    console.log(`Message sent to chat: ${chatId}`);
   });
 
   socket.on('disconnect', () => {
